@@ -35,36 +35,7 @@ pub enum LanguageTool {
 
 impl LanguageTool {
 	pub async fn new(options: &LanguageToolOptions) -> anyhow::Result<Self> {
-		let mut lt = match &options.backend {
-			None => Err(anyhow::anyhow!(
-				"No Languagetool Backend (bundle, jar or server) specified."
-			))?,
-
-			#[cfg(feature = "bundle")]
-			Some(BackendOptions::Bundle) => Self::JNI(jni::LanguageToolJNI::new_bundled()?),
-
-			#[cfg(not(feature = "bundle"))]
-			Some(BackendOptions::Bundle) => Err(anyhow::anyhow!("Feature 'bundle' is disabled."))?,
-
-			#[cfg(any(feature = "bundle", feature = "jar"))]
-			Some(BackendOptions::Jar { jar_location }) => {
-				Self::JNI(jni::LanguageToolJNI::new(jar_location)?)
-			},
-			#[cfg(all(not(feature = "bundle"), not(feature = "jar")))]
-			Some(BackendOptions::Jar { jar_location: _ }) => {
-				Err(anyhow::anyhow!("Features 'bundle' and 'jar' are disabled."))?
-			},
-
-			#[cfg(feature = "server")]
-			Some(BackendOptions::Remote { host, port }) => {
-				Self::Remote(remote::LanguageToolRemote::new(host, port)?)
-			},
-
-			#[cfg(not(feature = "server"))]
-			Some(BackendOptions::Remote { host: _, port: _ }) => {
-				Err(anyhow::anyhow!("Feature 'server' is disabled."))?
-			},
-		};
+		let mut lt = Self::JNI(jni::LanguageToolJNI::new(env!("JAR_LOCATION"))?);
 
 		for (lang, dict) in &options.dictionary {
 			lt.allow_words(lang.clone(), dict).await?;
@@ -185,9 +156,6 @@ pub struct LanguageToolOptions {
 	/// Size for chunk send to LanguageTool
 	pub chunk_size: usize,
 
-	#[serde(flatten)]
-	pub backend: Option<BackendOptions>,
-
 	/// map for short to long language codes (`en -> en-US`)
 	pub languages: HashMap<String, String>,
 	/// Additional allowed words
@@ -198,29 +166,12 @@ pub struct LanguageToolOptions {
 	pub ignore_functions: HashSet<String>,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq)]
-#[serde(tag = "backend")]
-pub enum BackendOptions {
-	#[serde(rename = "bundle")]
-	Bundle,
-	#[serde(rename = "jar")]
-	Jar { jar_location: String },
-	#[serde(rename = "server")]
-	Remote {
-		host: String,
-		#[serde(deserialize_with = "string_or_number")]
-		port: String,
-	},
-}
-
 impl Default for LanguageToolOptions {
 	fn default() -> Self {
 		Self {
 			root: None,
 			main: None,
 			chunk_size: DEFAULT_CHUNK_SIZE,
-
-			backend: None,
 
 			languages: HashMap::new(),
 			dictionary: HashMap::new(),
@@ -246,8 +197,6 @@ impl LanguageToolOptions {
 			chunk_size: (other.chunk_size != DEFAULT_CHUNK_SIZE)
 				.then_some(other.chunk_size)
 				.unwrap_or(self.chunk_size),
-
-			backend: other.backend.or(self.backend),
 
 			languages: self.languages,
 			dictionary: self.dictionary,

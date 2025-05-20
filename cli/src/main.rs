@@ -9,7 +9,7 @@ use notify::RecursiveMode;
 use notify_debouncer_mini::new_debouncer;
 use typst::World;
 use typst_languagetool::{
-	BackendOptions, LanguageTool, LanguageToolBackend, LanguageToolOptions, Suggestion,
+	LanguageTool, LanguageToolBackend, LanguageToolOptions, Suggestion,
 };
 
 use std::{
@@ -55,22 +55,6 @@ struct CliArgs {
 	#[clap(long, default_value_t = false)]
 	plain: bool,
 
-	/// Use bundled languagetool jar.
-	#[clap(long, default_value_t = false)]
-	bundle: bool,
-
-	/// Custom location for the languagetool jar.
-	#[clap(long, default_value = None)]
-	jar_location: Option<String>,
-
-	/// Host for remote languagetool server.
-	#[clap(long, default_value = None)]
-	host: Option<String>,
-
-	/// Port for remote languagetool server.
-	#[clap(long, default_value = None)]
-	port: Option<String>,
-
 	/// Path to JSON with configuration.
 	#[clap(long, default_value = None)]
 	options: Option<PathBuf>,
@@ -86,22 +70,8 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+	println!("{}", env!("JAR_LOCATION"));
 	let cli_args = CliArgs::parse();
-
-	let backend = match (
-		cli_args.bundle,
-		cli_args.jar_location,
-		cli_args.host,
-		cli_args.port,
-	) {
-		(false, None, None, None) => None,
-		(true, None, None, None) => Some(BackendOptions::Bundle),
-		(false, Some(path), None, None) => Some(BackendOptions::Jar { jar_location: path }),
-		(false, None, Some(host), Some(port)) => Some(BackendOptions::Remote { host, port }),
-		_ => Err(anyhow::anyhow!(
-			"Exactly one of 'bundled', 'jar_location' or 'host and port' must be specified."
-		))?,
-	};
 
 	let mut args = Args {
 		task: cli_args.task,
@@ -112,7 +82,6 @@ async fn main() -> anyhow::Result<()> {
 			root: cli_args.root,
 			main: cli_args.main,
 			chunk_size: cli_args.chunk_size,
-			backend,
 			..LanguageToolOptions::default()
 		},
 	};
